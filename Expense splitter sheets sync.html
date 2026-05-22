@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#1f1f1d" media="(prefers-color-scheme: dark)" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Expenses" />
+  <title>Expense Splitter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f7f6f3; --surface: #ffffff; --surface2: #f0ede8;
+      --border: rgba(0,0,0,0.1); --text: #1a1a1a;
+      --text-muted: #6b6762; --text-hint: #9b9690;
+      --accent: #2a5cff; --success: #1a8a5a; --success-bg: #e6f6ef;
+      --danger: #cc3333; --radius: 12px; --radius-sm: 8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #161614; --surface: #1f1f1d; --surface2: #2a2a27;
+        --border: rgba(255,255,255,0.08); --text: #f0ede8;
+        --text-muted: #9b9690; --text-hint: #6b6762;
+        --accent: #6b8eff; --success: #3ecf8e; --success-bg: #0d2b1e;
+        --danger: #ff6b6b;
+      }
+    }
+
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 1rem 1.25rem; position: sticky; top: 0; z-index: 10;
+    }
+    header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+    header p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+    main { max-width: 520px; margin: 0 auto; padding: 1.25rem; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+    .card-title { font-size: 13px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 1rem; }
+
+    label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 5px; }
+
+    input[type="text"], input[type="number"], input[type="date"], select {
+      width: 100%; height: 44px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 0 12px; font-family: inherit; font-size: 15px; color: var(--text);
+      outline: none; transition: border-color 0.15s; -webkit-appearance: none; appearance: none;
+    }
+    input[type="date"] { color-scheme: light dark; }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b6762' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; padding-right: 36px;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
+
+    @media (max-width: 420px) {
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+      .grid-3 .span-2 { grid-column: 1 / -1; }
+    }
+
+    button.primary {
+      width: 100%; height: 48px; margin-top: 14px; background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius-sm); font-family: inherit;
+      font-size: 15px; font-weight: 500; cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+    }
+    button.primary:active { opacity: 0.85; transform: scale(0.99); }
+    button.primary:disabled { background: var(--text-hint); opacity: 0.6; cursor: not-allowed; }
+
+    button.secondary {
+      height: 44px; padding: 0 18px; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap;
+    }
+    button.secondary:active { opacity: 0.75; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1rem; }
+    .stat { background: var(--surface2); border-radius: var(--radius-sm); padding: 0.85rem 0.75rem; }
+    .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .stat-value { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+
+    .settlement {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--success-bg); border: 1px solid rgba(0,0,0,0.06);
+      border-radius: var(--radius-sm); padding: 1rem 1.1rem; margin-bottom: 1rem;
+    }
+    .settlement-icon { font-size: 22px; flex-shrink: 0; }
+    .settlement-label { font-size: 12px; color: var(--success); font-weight: 500; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+    .settlement-value { font-size: 17px; font-weight: 600; color: var(--success); }
+
+    .action-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .clear-btn { background: none; border: none; color: var(--text-hint); font-family: inherit; font-size: 13px; cursor: pointer; padding: 4px 0; margin-left: auto; }
+    .clear-btn:hover { color: var(--danger); }
+
+    .expense-item { display: flex; align-items: center; gap: 8px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+    .expense-item:last-child { border-bottom: none; }
+    .expense-info { flex: 1; min-width: 0; }
+    .expense-desc { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .expense-meta { display: flex; gap: 6px; margin-top: 3px; align-items: center; flex-wrap: wrap; }
+    .expense-date { font-size: 12px; color: var(--text-hint); }
+    .expense-category {
+      font-size: 11px; padding: 2px 7px; border-radius: 20px;
+      background: var(--surface2); color: var(--text-muted); font-weight: 500;
+    }
+    .expense-payer {
+      font-size: 12px; padding: 3px 9px; border-radius: 20px;
+      white-space: nowrap; flex-shrink: 0; font-weight: 500;
+    }
+    .payer-penny { background: #f0eeff; color: #5b3fc7; }
+    .payer-vasilis { background: #e6f3ff; color: #1a5fa8; }
+    @media (prefers-color-scheme: dark) {
+      .payer-penny { background: #2a1f4a; color: #b89fff; }
+      .payer-vasilis { background: #0f2a40; color: #7ab8f5; }
+    }
+    .expense-amount { font-size: 15px; font-weight: 500; min-width: 64px; text-align: right; flex-shrink: 0; }
+    .remove-btn { width: 28px; height: 28px; background: none; border: none; cursor: pointer; color: var(--text-hint); font-size: 18px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0; transition: background 0.1s, color 0.1s; }
+    .remove-btn:hover { background: var(--surface2); color: var(--danger); }
+
+    .empty-state { text-align: center; padding: 2rem 1rem; color: var(--text-hint); font-size: 14px; }
+    #summary-card { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Expense Splitter</h1>
+  <p>Penny &amp; Vasilis · 50/50</p>
+</header>
+
+<main>
+
+  <div class="card">
+    <div class="card-title">Add expense</div>
+
+    <div class="field">
+      <label for="category">Category</label>
+      <select id="category">
+        <option value="Groceries">🛒 Groceries</option>
+        <option value="Rent">🏠 Rent</option>
+        <option value="Bills">💡 Bills</option>
+        <option value="Utilities">🔧 Utilities</option>
+        <option value="Dining out">🍽️ Dining out</option>
+        <option value="Transport">🚗 Transport</option>
+        <option value="Health">💊 Health</option>
+        <option value="Clothing">👗 Clothing</option>
+        <option value="Entertainment">🎬 Entertainment</option>
+        <option value="Home & garden">🪴 Home &amp; garden</option>
+        <option value="Personal care">🧴 Personal care</option>
+        <option value="Travel">✈️ Travel</option>
+        <option value="Pets">🐾 Pets</option>
+        <option value="Other">📦 Other</option>
+      </select>
+    </div>
+
+    <div class="field" style="margin-top:10px;">
+      <label for="desc">Description <span style="color:var(--text-hint);font-weight:400;">(optional)</span></label>
+      <input type="text" id="desc" placeholder="e.g. LIDL weekly shop" autocomplete="off" />
+    </div>
+
+    <div class="grid-3" style="margin-top:10px;">
+      <div class="field span-2">
+        <label for="expdate">Date</label>
+        <input type="date" id="expdate" />
+      </div>
+      <div class="field">
+        <label for="amount">Amount (€)</label>
+        <input type="number" id="amount" placeholder="0.00" min="0" step="0.01" inputmode="decimal" />
+      </div>
+      <div class="field">
+        <label for="paidby">Paid by</label>
+        <select id="paidby">
+          <option value="Penny">Penny</option>
+          <option value="Vasilis">Vasilis</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="primary" id="add-btn" onclick="addExpense()">Add expense</button>
+  </div>
+
+  <div class="card" id="summary-card">
+    <div class="card-title">Summary</div>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="total-display">€0</div></div>
+      <div class="stat"><div class="stat-label">Penny paid</div><div class="stat-value" id="penny-paid-display">€0</div></div>
+      <div class="stat"><div class="stat-label">Vasilis paid</div><div class="stat-value" id="vasilis-paid-display">€0</div></div>
+    </div>
+    <div class="settlement">
+      <div class="settlement-icon">⇄</div>
+      <div>
+        <div class="settlement-label">Settlement</div>
+        <div class="settlement-value" id="settlement-text">All settled up</div>
+      </div>
+    </div>
+    <div class="action-row">
+      <button class="secondary" onclick="exportExcel()">Export to Excel</button>
+      <button class="secondary" id="sync-btn" onclick="exportToGoogleSheets()">Sync to Google Sheet</button>
+      <button class="clear-btn" onclick="clearAll()">✕ Clear all</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Expenses</div>
+    <div id="expense-list"><div class="empty-state">No expenses yet — add one above</div></div>
+  </div>
+
+</main>
+
+<script>
+  // PASTE YOUR DEPLOYED GOOGLE APPS SCRIPT WEB APP URL HERE
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxkxcpvvYaAejphpXPoCQ_PNc39Yv7IONPC6gVeRgjYkspqGQFhjSyWaS7qyg1Bdlle/exec";
+
+  let expenses = [];
+
+  function fmt(n) { return '€' + parseFloat(n).toFixed(2); }
+  function today() { return new Date().toISOString().split('T')[0]; }
+  function formatDate(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return d + '/' + m + '/' + y;
+  }
+  function payerClass(name) {
+    if (name === 'Penny') return 'payer-penny';
+    if (name === 'Vasilis') return 'payer-vasilis';
+    return '';
+  }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('expdate').value = today();
+  });
+
+  function addExpense() {
+    const category = document.getElementById('category').value;
+    const desc = document.getElementById('desc').value.trim();
+    const amount = parseFloat(document.getElementById('amount').value);
+    const paidBy = document.getElementById('paidby').value;
+    const date = document.getElementById('expdate').value;
+
+    if (isNaN(amount) || amount <= 0) {
+      document.getElementById('amount').focus();
+      return;
+    }
+
+    expenses.push({ id: Date.now(), category, desc, amount, paidBy, date });
+    document.getElementById('desc').value = '';
+    document.getElementById('amount').value = '';
+    document.getElementById('expdate').value = today();
+    document.getElementById('amount').focus();
+    render();
+  }
+
+  function removeExpense(id) {
+    expenses = expenses.filter(e => e.id !== id);
+    render();
+  }
+
+  function clearAll() {
+    if (confirm('Clear all expenses?')) { expenses = []; render(); }
+  }
+
+  function render() {
+    const list = document.getElementById('expense-list');
+    const summaryCard = document.getElementById('summary-card');
+
+    if (expenses.length === 0) {
+      list.innerHTML = '<div class="empty-state">No expenses yet — add one above</div>';
+      summaryCard.style.display = 'none';
+      return;
+    }
+
+    summaryCard.style.display = 'block';
+
+    let pennyPaid = 0, vasilisPaid = 0;
+    expenses.forEach(e => {
+      if (e.paidBy === 'Penny') pennyPaid += parseFloat(e.amount);
+      else vasilisPaid += parseFloat(e.amount);
+    });
+
+    const total = pennyPaid + vasilisPaid;
+    const diff = pennyPaid - vasilisPaid;
+
+    document.getElementById('total-display').textContent = fmt(total);
+    document.getElementById('penny-paid-display').textContent = fmt(pennyPaid);
+    document.getElementById('vasilis-paid-display').textContent = fmt(vasilisPaid);
+
+    const stEl = document.getElementById('settlement-text');
+    if (Math.abs(diff) < 0.01) stEl.textContent = 'All settled up';
+    else if (diff > 0) stEl.textContent = 'Vasilis owes Penny ' + fmt(diff / 2);
+    else stEl.textContent = 'Penny owes Vasilis ' + fmt(Math.abs(diff) / 2);
+
+    const sorted = [...expenses].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    list.innerHTML = sorted.map(e => `
+      <div class="expense-item">
+        <div class="expense-info">
+          <div class="expense-desc">${escHtml(e.desc || e.category)}</div>
+          <div class="expense-meta">
+            ${e.date ? `<span class="expense-date">${formatDate(e.date)}</span>` : ''}
+            ${e.desc ? `<span class="expense-category">${escHtml(e.category)}</span>` : ''}
+          </div>
+        </div>
+        <span class="expense-payer ${payerClass(e.paidBy)}">${escHtml(e.paidBy)}</span>
+        <span class="expense-amount">${fmt(e.amount)}</span>
+        <button class="remove-btn" onclick="removeExpense(${e.id})" aria-label="Remove">✕</button>
+      </div>
+    `).join('');
+  }
+
+  async function exportToGoogleSheets() {
+    if (GOOGLE_SCRIPT_URL === "YOUR_DEPLOYED_WEB_APP_URL_HERE") {
+      alert("Please configure your GOOGLE_SCRIPT_URL first inside the source code.");
+      return;
+    }
+
+    const syncBtn = document.getElementById('sync-btn');
+    const addBtn = document.getElementById('add-btn');
+    
+    syncBtn.disabled = true;
+    syncBtn.textContent = "Syncing...";
+    addBtn.disabled = true;
+
+    try {
+      // Loop sequentially over each item in the local active session list to sync cleanly
+      for (const item of expenses) {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors", // Required bypass for Google web app redirect limitations
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item)
+        });
+      }
+      alert("Expenses successfully synced to Google Sheets!");
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred during synchronization. Check your deployment link or connection.");
+    } finally {
+      syncBtn.disabled = false;
+      syncBtn.textContent = "Sync to Google Sheet";
+      addBtn.disabled = false;
+    }
+  }
+
+  function exportExcel() {
+    let pennyPaid = 0, vasilisPaid = 0;
+    expenses.forEach(e => {
+      if (e.paidBy === 'Penny') pennyPaid += parseFloat(e.amount);
+      else vasilisPaid += parseFloat(e.amount);
+    });
+    const total = pennyPaid + vasilisPaid;
+    const diff = pennyPaid - vasilisPaid;
+    let settlementText;
+    if (Math.abs(diff) < 0.01) settlementText = 'All settled up';
+    else if (diff > 0) settlementText = 'Vasilis owes Penny ' + fmt(diff / 2);
+    else settlementText = 'Penny owes Vasilis ' + fmt(Math.abs(diff) / 2);
+
+    const wb = XLSX.utils.book_new();
+    const sorted = [...expenses].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    const expRows = [['Date', 'Category', 'Description', 'Paid By', 'Amount (€)', 'Each Owes (€)']];
+    sorted.forEach(e => {
+      expRows.push([
+        formatDate(e.date),
+        e.category,
+        e.desc || '',
+        e.paidBy,
+        parseFloat(e.amount),
+        parseFloat((e.amount / 2).toFixed(2))
+      ]);
+    });
+    const expSheet = XLSX.utils.aoa_to_sheet(expRows);
+    expSheet['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, expSheet, 'Expenses');
+
+    const sumRows = [
+      ['Summary'], [],
+      ['Total spent', total],
+      ['Penny paid', pennyPaid],
+      ['Vasilis paid', vasilisPaid],
+      ['Each owes', parseFloat((total / 2).toFixed(2))],
+      [],
+      ['Settlement', settlementText],
+      [],
+      ['Exported', new Date().toLocaleDateString('en-GB')]
+    ];
+    const sumSheet = XLSX.utils.aoa_to_sheet(sumRows);
+    sumSheet['!cols'] = [{ wch: 20 }, { wch: 26 }];
+    XLSX.utils.book_append_sheet(wb, sumSheet, 'Summary');
+
+    XLSX.writeFile(wb, 'expenses-penny-vasilis.xlsx');
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('desc').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('amount').focus(); });
+    document.getElementById('amount').addEventListener('keydown', e => { if (e.key === 'Enter') addExpense(); });
+  });
+</script>
+</body>
+</html>
