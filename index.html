@@ -138,6 +138,7 @@
 </header>
 
 <main>
+
   <div class="card" id="lock-card">
     <div class="card-title">Security Access</div>
     <div class="field">
@@ -351,21 +352,44 @@
 
     try {
       localStorage.setItem('exp_sync_pass', passInput);
+      let totalSynced = 0;
+      let unauthorizedFound = false;
 
       for (const item of expenses) {
-        const payload = { ...item, passKey: passInput };
+        const formPayload = new URLSearchParams();
+        formPayload.append("passKey", passInput);
+        formPayload.append("id", item.id);
+        formPayload.append("date", item.date);
+        formPayload.append("category", item.category);
+        formPayload.append("desc", item.desc || "");
+        formPayload.append("paidBy", item.paidBy);
+        formPayload.append("amount", item.amount);
         
-        await fetch(GOOGLE_SCRIPT_URL, {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
-          mode: "no-cors",
-          body: JSON.stringify(payload)
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formPayload.toString()
         });
+        
+        const result = await response.json();
+        if (result.result === "error" && result.result === "Unauthorized") {
+          unauthorizedFound = true;
+          break;
+        } else if (result.result === "success") {
+          totalSynced++;
+        }
       }
       
-      alert("Expenses successfully submitted to Google Sheets processing!");
+      if (unauthorizedFound) {
+        alert("Sync failed: Incorrect security password. No data was added.");
+      } else if (totalSynced === expenses.length) {
+        alert("Expenses successfully synced to Google Sheets!");
+      } else {
+        alert("Sync completed with anomalies. Please check your sheet.");
+      }
     } catch (err) {
       console.error(err);
-      alert("An error occurred during synchronization.");
+      alert("An error occurred during synchronization. Verify script access permissions.");
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = "Sync to Google Sheet";
