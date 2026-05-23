@@ -351,9 +351,8 @@
 
     try {
       localStorage.setItem('exp_sync_pass', passInput);
-      let syncError = false;
 
-    for (const item of expenses) {
+      for (const item of expenses) {
         const payload = { ...item, passKey: passInput };
         
         await fetch(GOOGLE_SCRIPT_URL, {
@@ -362,19 +361,8 @@
           body: JSON.stringify(payload)
         });
       }
-        
-        const resultText = await response.text();
-        if (resultText.includes("Unauthorized") || resultText.includes("error")) {
-          syncError = true;
-          break;
-        }
-      }
       
-      if (syncError) {
-        alert("Sync failed: Incorrect security password.");
-      } else {
-        alert("Expenses successfully synced to Google Sheets!");
-      }
+      alert("Expenses successfully submitted to Google Sheets processing!");
     } catch (err) {
       console.error(err);
       alert("An error occurred during synchronization.");
