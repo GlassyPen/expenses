@@ -353,14 +353,15 @@
       localStorage.setItem('exp_sync_pass', passInput);
       let syncError = false;
 
-      for (const item of expenses) {
+for (const item of expenses) {
         const payload = { ...item, passKey: passInput };
         
-        const response = await fetch(GOOGLE_SCRIPT_URL, {
+        await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          mode: "no-cors",
           body: JSON.stringify(payload)
         });
+      }
         
         const resultText = await response.text();
         if (resultText.includes("Unauthorized") || resultText.includes("error")) {
