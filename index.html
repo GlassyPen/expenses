@@ -134,7 +134,7 @@
 
 <header>
   <h1>Expense Splitter</h1>
-  <p>Penny &amp; Vasilis · 50/50</p>
+  <p>Penny &amp; Vasilis</p>
 </header>
 
 <main>
@@ -181,7 +181,7 @@
         <input type="date" id="expdate" />
       </div>
       <div class="field">
-        <label for="amount">Amount (€)</label>
+        <label for="amount">Total Amount (€)</label>
         <input type="number" id="amount" placeholder="0.00" min="0" step="0.01" inputmode="decimal" />
       </div>
       <div class="field">
@@ -193,15 +193,34 @@
       </div>
     </div>
 
+    <div class="field" style="margin-top:10px;">
+      <label for="split-type">Split</label>
+      <select id="split-type" onchange="toggleCustomSplit()">
+        <option value="equal">Equally (50/50)</option>
+        <option value="custom">Custom Amounts</option>
+      </select>
+    </div>
+
+    <div class="grid-2" id="custom-split-fields" style="display:none; margin-top:10px;">
+      <div class="field">
+        <label for="penny-share">Penny's Share (€)</label>
+        <input type="number" id="penny-share" placeholder="0.00" min="0" step="0.01" inputmode="decimal" />
+      </div>
+      <div class="field">
+        <label for="vasilis-share">Vasilis's Share (€)</label>
+        <input type="number" id="vasilis-share" placeholder="0.00" min="0" step="0.01" inputmode="decimal" />
+      </div>
+    </div>
+
     <button class="primary" id="add-btn" onclick="addExpense()">Add expense</button>
   </div>
 
   <div class="card" id="summary-card">
     <div class="card-title">Summary</div>
     <div class="stats-grid">
-      <div class="stat"><div class="stat-label">Total</div><div class="stat-value" id="total-display">€0</div></div>
-      <div class="stat"><div class="stat-label">Penny paid</div><div class="stat-value" id="penny-paid-display">€0</div></div>
-      <div class="stat"><div class="stat-label">Vasilis paid</div><div class="stat-value" id="vasilis-paid-display">€0</div></div>
+      <div class="stat"><div class="stat-label">Total Spent</div><div class="stat-value" id="total-display">€0</div></div>
+      <div class="stat"><div class="stat-label">Penny Paid</div><div class="stat-value" id="penny-paid-display">€0</div></div>
+      <div class="stat"><div class="stat-label">Vasilis Paid</div><div class="stat-value" id="vasilis-paid-display">€0</div></div>
     </div>
     <div class="settlement">
       <div class="settlement-icon">⇄</div>
@@ -248,10 +267,37 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('expdate').value = today();
-    
-    // Auto-load previously used password from local device memory for convenience
     if(localStorage.getItem('exp_sync_pass')) {
       document.getElementById('sys-password').value = localStorage.getItem('exp_sync_pass');
+    }
+  });
+
+  function toggleCustomSplit() {
+    const type = document.getElementById('split-type').value;
+    document.getElementById('custom-split-fields').style.display = type === 'custom' ? 'grid' : 'none';
+  }
+
+  // Auto-calculate remaining balance when entering custom shares
+  document.getElementById('penny-share').addEventListener('input', function() {
+    const total = parseFloat(document.getElementById('amount').value) || 0;
+    const penny = parseFloat(this.value) || 0;
+    if (total > 0 && penny <= total) {
+      document.getElementById('vasilis-share').value = (total - penny).toFixed(2);
+    }
+  });
+
+  document.getElementById('vasilis-share').addEventListener('input', function() {
+    const total = parseFloat(document.getElementById('amount').value) || 0;
+    const vasilis = parseFloat(this.value) || 0;
+    if (total > 0 && vasilis <= total) {
+      document.getElementById('penny-share').value = (total - vasilis).toFixed(2);
+    }
+  });
+
+  document.getElementById('amount').addEventListener('input', function() {
+    if (document.getElementById('split-type').value === 'custom') {
+      document.getElementById('penny-share').value = '';
+      document.getElementById('vasilis-share').value = '';
     }
   });
 
@@ -261,15 +307,38 @@
     const amount = parseFloat(document.getElementById('amount').value);
     const paidBy = document.getElementById('paidby').value;
     const date = document.getElementById('expdate').value;
+    const splitType = document.getElementById('split-type').value;
 
     if (isNaN(amount) || amount <= 0) {
       document.getElementById('amount').focus();
       return;
     }
 
-    expenses.push({ id: Date.now(), category, desc, amount, paidBy, date });
+    let pennyOwes = amount / 2;
+    let vasilisOwes = amount / 2;
+
+    if (splitType === 'custom') {
+      pennyOwes = parseFloat(document.getElementById('penny-share').value);
+      vasilisOwes = parseFloat(document.getElementById('vasilis-share').value);
+
+      if (isNaN(pennyOwes) || isNaN(vasilisOwes)) {
+        alert('Please enter valid amounts for the custom split.');
+        return;
+      }
+      if (Math.abs((pennyOwes + vasilisOwes) - amount) > 0.01) {
+        alert('The custom shares must exactly equal the total amount.');
+        return;
+      }
+    }
+
+    expenses.push({ id: Date.now(), category, desc, amount, paidBy, date, pennyOwes, vasilisOwes });
+    
     document.getElementById('desc').value = '';
     document.getElementById('amount').value = '';
+    document.getElementById('penny-share').value = '';
+    document.getElementById('vasilis-share').value = '';
+    document.getElementById('split-type').value = 'equal';
+    toggleCustomSplit();
     document.getElementById('expdate').value = today();
     document.getElementById('amount').focus();
     render();
@@ -297,22 +366,33 @@
     summaryCard.style.display = 'block';
 
     let pennyPaid = 0, vasilisPaid = 0;
+    let pennyOwesTotal = 0, vasilisOwesTotal = 0;
+
     expenses.forEach(e => {
       if (e.paidBy === 'Penny') pennyPaid += parseFloat(e.amount);
       else vasilisPaid += parseFloat(e.amount);
+
+      pennyOwesTotal += parseFloat(e.pennyOwes);
+      vasilisOwesTotal += parseFloat(e.vasilisOwes);
     });
 
     const total = pennyPaid + vasilisPaid;
-    const diff = pennyPaid - vasilisPaid;
+    
+    // Positive balance means the person paid more than their share and is owed money
+    const pennyBalance = pennyPaid - pennyOwesTotal;
 
     document.getElementById('total-display').textContent = fmt(total);
     document.getElementById('penny-paid-display').textContent = fmt(pennyPaid);
     document.getElementById('vasilis-paid-display').textContent = fmt(vasilisPaid);
 
     const stEl = document.getElementById('settlement-text');
-    if (Math.abs(diff) < 0.01) stEl.textContent = 'All settled up';
-    else if (diff > 0) stEl.textContent = 'Vasilis owes Penny ' + fmt(diff / 2);
-    else stEl.textContent = 'Penny owes Vasilis ' + fmt(Math.abs(diff) / 2);
+    if (Math.abs(pennyBalance) < 0.01) {
+      stEl.textContent = 'All settled up';
+    } else if (pennyBalance > 0) {
+      stEl.textContent = 'Vasilis owes Penny ' + fmt(pennyBalance);
+    } else {
+      stEl.textContent = 'Penny owes Vasilis ' + fmt(Math.abs(pennyBalance));
+    }
 
     const sorted = [...expenses].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     list.innerHTML = sorted.map(e => `
@@ -322,6 +402,9 @@
           <div class="expense-meta">
             ${e.date ? `<span class="expense-date">${formatDate(e.date)}</span>` : ''}
             ${e.desc ? `<span class="expense-category">${escHtml(e.category)}</span>` : ''}
+            <span style="font-size: 11px; color: var(--text-hint); margin-left: 4px;">
+              (P: ${fmt(e.pennyOwes)} / V: ${fmt(e.vasilisOwes)})
+            </span>
           </div>
         </div>
         <span class="expense-payer ${payerClass(e.paidBy)}">${escHtml(e.paidBy)}</span>
@@ -364,6 +447,8 @@
         formPayload.append("desc", item.desc || "");
         formPayload.append("paidBy", item.paidBy);
         formPayload.append("amount", item.amount);
+        formPayload.append("pennyOwes", item.pennyOwes);
+        formPayload.append("vasilisOwes", item.vasilisOwes);
         
         const response = await fetch(GOOGLE_SCRIPT_URL, {
           method: "POST",
@@ -372,7 +457,7 @@
         });
         
         const result = await response.json();
-        if (result.result === "error" && result.result === "Unauthorized") {
+        if (result.result === "error" && result.error === "Unauthorized") {
           unauthorizedFound = true;
           break;
         } else if (result.result === "success") {
@@ -399,21 +484,28 @@
 
   function exportExcel() {
     let pennyPaid = 0, vasilisPaid = 0;
+    let pennyOwesTotal = 0, vasilisOwesTotal = 0;
+
     expenses.forEach(e => {
       if (e.paidBy === 'Penny') pennyPaid += parseFloat(e.amount);
       else vasilisPaid += parseFloat(e.amount);
+
+      pennyOwesTotal += parseFloat(e.pennyOwes);
+      vasilisOwesTotal += parseFloat(e.vasilisOwes);
     });
+    
     const total = pennyPaid + vasilisPaid;
-    const diff = pennyPaid - vasilisPaid;
+    const pennyBalance = pennyPaid - pennyOwesTotal;
+
     let settlementText;
-    if (Math.abs(diff) < 0.01) settlementText = 'All settled up';
-    else if (diff > 0) settlementText = 'Vasilis owes Penny ' + fmt(diff / 2);
-    else settlementText = 'Penny owes Vasilis ' + fmt(Math.abs(diff) / 2);
+    if (Math.abs(pennyBalance) < 0.01) settlementText = 'All settled up';
+    else if (pennyBalance > 0) settlementText = 'Vasilis owes Penny ' + fmt(pennyBalance);
+    else settlementText = 'Penny owes Vasilis ' + fmt(Math.abs(pennyBalance));
 
     const wb = XLSX.utils.book_new();
     const sorted = [...expenses].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-    const expRows = [['Date', 'Category', 'Description', 'Paid By', 'Amount (€)', 'Each Owes (€)']];
+    const expRows = [['Date', 'Category', 'Description', 'Paid By', 'Total Amount (€)', 'Penny Share (€)', 'Vasilis Share (€)']];
     sorted.forEach(e => {
       expRows.push([
         formatDate(e.date),
@@ -421,11 +513,12 @@
         e.desc || '',
         e.paidBy,
         parseFloat(e.amount),
-        parseFloat((e.amount / 2).toFixed(2))
+        parseFloat(e.pennyOwes.toFixed(2)),
+        parseFloat(e.vasilisOwes.toFixed(2))
       ]);
     });
     const expSheet = XLSX.utils.aoa_to_sheet(expRows);
-    expSheet['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    expSheet['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, expSheet, 'Expenses');
 
     const sumRows = [
@@ -433,7 +526,8 @@
       ['Total spent', total],
       ['Penny paid', pennyPaid],
       ['Vasilis paid', vasilisPaid],
-      ['Each owes', parseFloat((total / 2).toFixed(2))],
+      ['Penny target share', pennyOwesTotal],
+      ['Vasilis target share', vasilisOwesTotal],
       [],
       ['Settlement', settlementText],
       [],
@@ -448,7 +542,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('desc').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('amount').focus(); });
-    document.getElementById('amount').addEventListener('keydown', e => { if (e.key === 'Enter') addExpense(); });
   });
 </script>
 </body>
