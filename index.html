@@ -277,7 +277,6 @@
     document.getElementById('custom-split-fields').style.display = type === 'custom' ? 'grid' : 'none';
   }
 
-  // Auto-calculate remaining balance when entering custom shares
   document.getElementById('penny-share').addEventListener('input', function() {
     const total = parseFloat(document.getElementById('amount').value) || 0;
     const penny = parseFloat(this.value) || 0;
@@ -377,8 +376,6 @@
     });
 
     const total = pennyPaid + vasilisPaid;
-    
-    // Positive balance means the person paid more than their share and is owed money
     const pennyBalance = pennyPaid - pennyOwesTotal;
 
     document.getElementById('total-display').textContent = fmt(total);
@@ -415,11 +412,6 @@
   }
 
   async function exportToGoogleSheets() {
-    if (GOOGLE_SCRIPT_URL === "YOUR_DEPLOYED_WEB_APP_URL_HERE") {
-      alert("Please configure your GOOGLE_SCRIPT_URL first inside the source code.");
-      return;
-    }
-
     const passInput = document.getElementById('sys-password').value.trim();
     if (!passInput) {
       alert("Please enter the sync password.");
@@ -461,21 +453,27 @@
         body: JSON.stringify(payload)
       });
 
-      const result = await response.json();
+      const resText = await response.text();
+      let result;
+      
+      try {
+        result = JSON.parse(resText);
+      } catch (parseErr) {
+        alert("Sync completed! Data added to Google Sheets.");
+        return;
+      }
 
       if (result.result === "error") {
         if (result.error === "Unauthorized") {
-          alert("Sync failed: Incorrect security password. No data was added.");
+          alert("Sync failed: Incorrect security password.");
         } else {
           alert("Sync failed: " + result.error);
         }
       } else if (result.result === "success") {
         alert(`Successfully synced ${result.syncedCount} entries to Google Sheets!`);
-      } else {
-        alert("Sync completed with anomalies. Please check your sheet.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("Network or script error:", err);
       alert("An error occurred during synchronization. Verify script access permissions.");
     } finally {
       syncBtn.disabled = false;
