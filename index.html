@@ -277,6 +277,7 @@
     document.getElementById('custom-split-fields').style.display = type === 'custom' ? 'grid' : 'none';
   }
 
+  // Auto-calculate remaining balance when entering custom shares
   document.getElementById('penny-share').addEventListener('input', function() {
     const total = parseFloat(document.getElementById('amount').value) || 0;
     const penny = parseFloat(this.value) || 0;
@@ -412,6 +413,11 @@
   }
 
   async function exportToGoogleSheets() {
+    if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL.includes("YOUR_DEPLOYED_WEB_APP_URL")) {
+      alert("Please configure your GOOGLE_SCRIPT_URL first inside the source code.");
+      return;
+    }
+
     const passInput = document.getElementById('sys-password').value.trim();
     if (!passInput) {
       alert("Please enter the sync password.");
@@ -453,28 +459,24 @@
         body: JSON.stringify(payload)
       });
 
-      const resText = await response.text();
-      let result;
-      
-      try {
-        result = JSON.parse(resText);
-      } catch (parseErr) {
-        alert("Sync completed! Data added to Google Sheets.");
-        return;
-      }
+      const result = await response.json();
 
       if (result.result === "error") {
         if (result.error === "Unauthorized") {
-          alert("Sync failed: Incorrect security password.");
+          alert("Sync failed: Incorrect security password. No data was added.");
         } else {
           alert("Sync failed: " + result.error);
         }
       } else if (result.result === "success") {
         alert(`Successfully synced ${result.syncedCount} entries to Google Sheets!`);
+        expenses = []; // Clear synced items from local list
+        render();
+      } else {
+        alert("Sync completed with unexpected response. Please check your sheet.");
       }
     } catch (err) {
-      console.error("Network or script error:", err);
-      alert("An error occurred during synchronization. Verify script access permissions.");
+      console.error(err);
+      alert("An error occurred during synchronization. Verify script access permissions or password.");
     } finally {
       syncBtn.disabled = false;
       syncBtn.textContent = "Sync to Google Sheet";
